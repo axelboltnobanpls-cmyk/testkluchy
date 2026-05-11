@@ -12,7 +12,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.enums import ParseMode
 
 # ======================== НАСТРОЙКИ ========================
-BOT_TOKEN = "8375269633:AAElLiElz8WvjdR_OxeCR6mBJZo6kzGK8xM"           # Токен от @BotFather
+python
+   BOT_TOKEN = os.environ.get("BOT_TOKEN", "ВАШ_ТОКЕН")           # Токен от @BotFather
 CHANNEL_USERNAME = "@growagarden_arferno"       # Юзернейм канала (С @, БЕЗ t.me/)
 KEYS_FILE = "keys.json"
 DATABASE_FILE = "users.db"
