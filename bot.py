@@ -13,7 +13,7 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
-# ======================== ПУТИ (АБСОЛЮТНЫЕ) ========================
+# ======================== ПУТИ ========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 KEYS_FILE = os.path.join(BASE_DIR, "keys.json")
 DATABASE_FILE = os.path.join(BASE_DIR, "users.db")
@@ -68,7 +68,7 @@ def init_db():
     """)
     conn.commit()
     conn.close()
-    logger.info("✅ База данных OK: " + DATABASE_FILE)
+    logger.info(f"✅ База данных OK: {DATABASE_FILE}")
 
 
 def user_exists(user_id: int) -> bool:
@@ -169,6 +169,25 @@ async def check_subscription(user_id: int) -> bool:
 
 
 # ======================== ОБРАБОТЧИКИ ========================
+
+# --- Catch-all для callback queries (кнопки) ---
+@router.callback_query()
+async def catch_all_callback(callback: CallbackQuery):
+    """Ловим ВСЕ callback queries, которые не обработаны конкретными хендлерами"""
+    logger.info(f"⚠️ Необработанный callback: {callback.data} от {callback.from_user.id}")
+    await callback.answer("❓ Неизвестное действие", show_alert=True)
+
+
+# --- Catch-all для сообщений (текст, стикеры и т.д.) ---
+# ВАЖНО: Этот хендлер стоит ПОСЛЕ всех конкретных, поэтому конкретные команды ловятся первыми
+@router.message()
+async def catch_all_message(message: Message):
+    """Ловим любые необработанные сообщения"""
+    logger.info(f"📩 Необработанное сообщение от {message.from_user.id}: {message.text}")
+    await message.answer(
+        "👋 Привет! Используй команду /start для получения ключа."
+    )
+
 
 # --- /start ---
 @router.message(CommandStart())
