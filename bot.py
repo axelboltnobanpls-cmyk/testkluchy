@@ -113,7 +113,6 @@ def load_keys() -> list:
         with open(KEYS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             keys = data.get("keys", [])
-            logger.info(f"📦 Загружено ключей: {len(keys)}")
             return keys
     except Exception as e:
         logger.error(f"Ошибка чтения keys.json: {e}")
@@ -124,7 +123,6 @@ def load_keys() -> list:
 def save_keys(keys: list):
     with open(KEYS_FILE, "w", encoding="utf-8") as f:
         json.dump({"keys": keys}, f, ensure_ascii=False, indent=2)
-    logger.info(f"💾 Сохранено ключей: {len(keys)}")
 
 
 def get_next_key() -> str | None:
@@ -168,26 +166,7 @@ async def check_subscription(user_id: int) -> bool:
         return False
 
 
-# ======================== ОБРАБОТЧИКИ ========================
-
-# --- Catch-all для callback queries (кнопки) ---
-@router.callback_query()
-async def catch_all_callback(callback: CallbackQuery):
-    """Ловим ВСЕ callback queries, которые не обработаны конкретными хендлерами"""
-    logger.info(f"⚠️ Необработанный callback: {callback.data} от {callback.from_user.id}")
-    await callback.answer("❓ Неизвестное действие", show_alert=True)
-
-
-# --- Catch-all для сообщений (текст, стикеры и т.д.) ---
-# ВАЖНО: Этот хендлер стоит ПОСЛЕ всех конкретных, поэтому конкретные команды ловятся первыми
-@router.message()
-async def catch_all_message(message: Message):
-    """Ловим любые необработанные сообщения"""
-    logger.info(f"📩 Необработанное сообщение от {message.from_user.id}: {message.text}")
-    await message.answer(
-        "👋 Привет! Используй команду /start для получения ключа."
-    )
-
+# ======================== ОБРАБОТЧИКИ (ВСЕ КОНКРЕТНЫЕ ПЕРВЫМ) ========================
 
 # --- /start ---
 @router.message(CommandStart())
@@ -196,8 +175,6 @@ async def cmd_start(message: Message):
     logger.info(f"👋 /start от {uid} ({message.from_user.first_name})")
 
     count = get_keys_count()
-    logger.info(f"🔑 Ключей в базе: {count}")
-
     if count == 0:
         await message.answer(
             "👋 <b>Приветствуем!</b>\n\n"
@@ -275,9 +252,7 @@ async def check_sub_callback(callback: CallbackQuery):
             disable_web_page_preview=True
         )
     elif user_exists(uid):
-        await callback.message.edit_text(
-            "🔒 Уже получали ключ. Акция — один раз."
-        )
+        await callback.message.edit_text("🔒 Уже получали ключ. Акция — один раз.")
     else:
         key = get_next_key()
         if key:
@@ -298,7 +273,7 @@ async def check_sub_callback(callback: CallbackQuery):
             await callback.message.edit_text("😔 Ключи закончились!")
 
 
-# --- Админ: /addkey ---
+# --- Админские команды ---
 @router.message(Command("addkey"))
 async def cmd_add_key(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -315,7 +290,6 @@ async def cmd_add_key(message: Message):
     await message.answer(f"✅ Добавлено <b>{len(new_keys)}</b> ключей.\nВсего: <b>{len(existing)}</b>")
 
 
-# --- Админ: /stats ---
 @router.message(Command("stats"))
 async def cmd_stats(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -330,7 +304,6 @@ async def cmd_stats(message: Message):
     )
 
 
-# --- Админ: /delkey ---
 @router.message(Command("delkey"))
 async def cmd_del_key(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -349,7 +322,6 @@ async def cmd_del_key(message: Message):
         await message.answer(f"❌ Ключ не найден.")
 
 
-# --- Админ: /listkeys ---
 @router.message(Command("listkeys"))
 async def cmd_list_keys(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -368,7 +340,6 @@ async def cmd_list_keys(message: Message):
         await message.answer(text)
 
 
-# --- Админ: /setchannel ---
 @router.message(Command("setchannel"))
 async def cmd_set_channel(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -381,6 +352,18 @@ async def cmd_set_channel(message: Message):
     CHANNEL_USERNAME = new_channel if new_channel.startswith("@") else f"@{new_channel}"
     save_config({"channel": CHANNEL_USERNAME})
     await message.answer(f"✅ Канал: <code>{CHANNEL_USERNAME}</code>")
+
+
+# --- Catch-all: ПОСЛЕДНИМ (чтобы не перехватывал конкретные команды) ---
+@router.message()
+async def catch_all_message(message: Message):
+    logger.info(f"📩 Необработанное: {message.from_user.id}: {message.text}")
+
+
+@router.callback_query()
+async def catch_all_callback(callback: CallbackQuery):
+    logger.info(f"⚠️ Необработанный callback: {callback.data}")
+    await callback.answer("❓ Неизвестное действие", show_alert=True)
 
 
 # ======================== КОНФИГ ========================
@@ -396,7 +379,6 @@ def load_config() -> dict:
 def save_config(cfg: dict):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
-
 
 saved_cfg = load_config()
 if "channel" in saved_cfg:
