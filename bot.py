@@ -48,7 +48,6 @@ bot = Bot(
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 
-# Явно создаём storage, чтобы избежать проблем с FSM
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 router = Router()
@@ -171,14 +170,6 @@ async def check_subscription(user_id: int) -> bool:
 
 # ======================== ОБРАБОТЧИКИ ========================
 
-# --- Catch-all: ЛОВИМ ЛЮБОЙ НЕОБРАБОТАННЫЙ UPDATE ---
-@router.message()
-async def catch_all(message: Message):
-    """Этот хендлер ловит ВСЕ сообщения, которые не поймали другие хендлеры."""
-    logger.warning(f"⚠️ Необработанное сообщение от {message.from_user.id}: {message.text}")
-    # Ничего не отвечаем — просто логируем
-
-
 # --- /start ---
 @router.message(CommandStart())
 async def cmd_start(message: Message):
@@ -294,12 +285,10 @@ async def cmd_add_key(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ Нет прав.")
         return
-
     text = message.text.replace("/addkey", "").strip()
     if not text:
         await message.answer("📝 <code>/addkey\nXXXX-XXXX-XXXX\nYYYY-YYYY-YYYY</code>")
         return
-
     new_keys = [k.strip() for k in text.split("\n") if k.strip()]
     existing = load_keys()
     existing.extend(new_keys)
@@ -313,7 +302,6 @@ async def cmd_stats(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ Нет прав.")
         return
-
     keys_left = get_keys_count()
     stats = get_stats()
     await message.answer(
@@ -329,12 +317,10 @@ async def cmd_del_key(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ Нет прав.")
         return
-
     key_to_del = message.text.replace("/delkey", "").strip()
     if not key_to_del:
         await message.answer("Использование: <code>/delkey XXXX-XXXX-XXXX</code>")
         return
-
     keys = load_keys()
     if key_to_del in keys:
         keys.remove(key_to_del)
@@ -349,16 +335,13 @@ async def cmd_del_key(message: Message):
 async def cmd_list_keys(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         return
-
     keys = load_keys()
     if not keys:
         await message.answer("📭 Ключей нет.")
         return
-
     text = "🔑 <b>Доступные ключи:</b>\n\n"
     for i, k in enumerate(keys, 1):
         text += f"{i}. <code>{k}</code>\n"
-
     if len(text) > 4000:
         for part in [text[i:i+4000] for i in range(0, len(text), 4000)]:
             await message.answer(part)
@@ -412,7 +395,6 @@ async def main():
     logger.info(f"🗄️ keys.json: {KEYS_FILE}")
     logger.info(f"🗄️ users.db: {DATABASE_FILE}")
     logger.info("=" * 50)
-
     dp.include_router(router)
     await dp.start_polling(bot)
 
