@@ -10,13 +10,14 @@ from aiogram.types import (
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 
 # ======================== НАСТРОЙКИ ========================
-BOT_TOKEN = "8375269633:AAElLiElz8WvjdR_OxeCR6mBJZo6kzGK8xM"           # Токен от @BotFather
-CHANNEL_USERNAME = "@growagarden_arferno"       # Юзернейм канала (С @, БЕЗ t.me/)
+BOT_TOKEN = "8375269633:AAElLiElz8WvjdR_OxeCR6mBJZo6kzGK8xM"
+CHANNEL_USERNAME = "@growagarden_arferno"
 KEYS_FILE = "keys.json"
 DATABASE_FILE = "users.db"
-ADMIN_IDS = [7079908197]                  # Список Telegram ID админов
+ADMIN_IDS = [7079908197]
 
 INSTRUCTION_TEXT = (
     "📖 <b>Инструкция по активации ключа в Steam:</b>\n\n"
@@ -31,21 +32,21 @@ INSTRUCTION_TEXT = (
 )
 # ==========================================================
 
-# Логирование
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
 dp = Dispatcher()
 router = Router()
 
 
-# ======================== БАЗА ДАННЫХ ========================
 def init_db():
-    """Создание таблицы пользователей при первом запуске"""
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
     cursor.execute("""
@@ -63,7 +64,6 @@ def init_db():
 
 
 def user_exists(user_id: int) -> bool:
-    """Проверяет, получал ли пользователь уже ключ"""
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
@@ -73,7 +73,6 @@ def user_exists(user_id: int) -> bool:
 
 
 def save_user(user_id: int, username: str, first_name: str, key: str):
-    """Сохраняет пользователя и выданный ему ключ"""
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
     cursor.execute(
@@ -85,7 +84,6 @@ def save_user(user_id: int, username: str, first_name: str, key: str):
 
 
 def get_stats() -> dict:
-    """Возвращает статистику: сколько ключей выдано"""
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM users")
@@ -94,9 +92,7 @@ def get_stats() -> dict:
     return {"total_users": total}
 
 
-# ======================== РАБОТА С КЛЮЧАМИ ========================
 def load_keys() -> list:
-    """Загружает список ключей из keys.json"""
     if not os.path.exists(KEYS_FILE):
         return []
     try:
@@ -104,19 +100,17 @@ def load_keys() -> list:
             data = json.load(f)
             return data.get("keys", [])
     except (json.JSONDecodeError, KeyError):
-        logger.error("Ошибка чтения keys.json — создаём пустой файл")
+        logger.error("Ошибка чтения keys.json")
         save_keys([])
         return []
 
 
 def save_keys(keys: list):
-    """Сохраняет список ключей в keys.json"""
     with open(KEYS_FILE, "w", encoding="utf-8") as f:
         json.dump({"keys": keys}, f, ensure_ascii=False, indent=2)
 
 
 def get_next_key() -> str | None:
-    """Достаёт первый ключ из файла и удаляет его. Возвращает None если пусто."""
     keys = load_keys()
     if not keys:
         return None
@@ -127,13 +121,10 @@ def get_next_key() -> str | None:
 
 
 def get_keys_count() -> int:
-    """Возвращает количество оставшихся ключей"""
     return len(load_keys())
 
 
-# ======================== КЛАВИАТУРЫ ========================
 def get_channel_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура с кнопкой «Проверить подписку» и ссылкой на канал"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Перейти в канал", url="https://t.me/coppers_shop")],
         [InlineKeyboardButton(text="✅ Проверить подписку", callback_data="check_sub")]
@@ -141,18 +132,12 @@ def get_channel_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_main_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура после выдачи ключа"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Наш канал", url="https://t.me/coppers_shop")]
     ])
 
 
-# ======================== ПРОВЕРКА ПОДПИСКИ ========================
 async def check_subscription(user_id: int) -> bool:
-    """
-    Проверяет, подписан ли пользователь на канал.
-    ВАЖНО: бот должен быть администратором в канале @coppers_shop!
-    """
     try:
         member = await bot.get_chat_member(
             chat_id=CHANNEL_USERNAME,
@@ -160,19 +145,15 @@ async def check_subscription(user_id: int) -> bool:
         )
         return member.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.error(f"Ошибка при проверке подписки пользователя {user_id}: {e}")
+        logger.error(f"Ошибка при проверке подписки: {e}")
         return False
 
 
-# ======================== ОБРАБОТЧИКИ ========================
-
-# --- /start ---
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     uid = message.from_user.id
 
-    # Если ключи закончились
     if get_keys_count() == 0:
         await message.answer(
             "👋 <b>Приветствуем!</b>\n\n"
@@ -185,7 +166,6 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         return
 
-    # Уже получал ключ — не даём повторно
     if user_exists(uid):
         await message.answer(
             "🔒 <b>Упс!</b>\n\n"
@@ -195,11 +175,9 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         return
 
-    # Проверяем подписку
     is_subscribed = await check_subscription(uid)
 
     if not is_subscribed:
-        # Не подписан — просим подписаться
         await message.answer(
             "👋 <b>Приветствуем вас!</b>\n\n"
             "🎁 Для получения <b>бесплатного ключа</b> подпишитесь на наш канал:\n\n"
@@ -209,7 +187,6 @@ async def cmd_start(message: Message, state: FSMContext):
             disable_web_page_preview=True
         )
     else:
-        # Подписан — сразу выдаём ключ
         key = get_next_key()
         if key:
             save_user(
@@ -229,7 +206,6 @@ async def cmd_start(message: Message, state: FSMContext):
             await message.answer("😔 Ключи закончились. Попробуйте позже!")
 
 
-# --- Callback: Проверить подписку ---
 @router.callback_query(F.data == "check_sub")
 async def check_sub_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -259,7 +235,6 @@ async def check_sub_callback(callback: CallbackQuery, state: FSMContext):
             "Вы уже получали ключ. Акция действует один раз на человека."
         )
     else:
-        # Подписан и ключ ещё не получал — выдаём
         key = get_next_key()
         if key:
             save_user(
@@ -281,10 +256,8 @@ async def check_sub_callback(callback: CallbackQuery, state: FSMContext):
             )
 
 
-# --- Админ: добавить ключи (/addkey) ---
 @router.message(Command("addkey"))
-async def cmd_add_key(message: Message, state: FSMContext):
-    """Админ добавляет ключи через текст сообщения, один ключ на строку"""
+async def cmd_add_key(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ У вас нет прав для этой команды.")
         return
@@ -313,7 +286,6 @@ async def cmd_add_key(message: Message, state: FSMContext):
     logger.info(f"🗝️ Админ {message.from_user.id} добавил {len(new_keys)} ключей")
 
 
-# --- Админ: статистика (/stats) ---
 @router.message(Command("stats"))
 async def cmd_stats(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -329,7 +301,6 @@ async def cmd_stats(message: Message):
     )
 
 
-# --- Админ: удалить конкретный ключ (/delkey) ---
 @router.message(Command("delkey"))
 async def cmd_del_key(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -350,7 +321,6 @@ async def cmd_del_key(message: Message):
         await message.answer(f"❌ Ключ <code>{key_to_del}</code> не найден в базе.")
 
 
-# --- Админ: список всех ключей (/listkeys) ---
 @router.message(Command("listkeys"))
 async def cmd_list_keys(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -365,7 +335,6 @@ async def cmd_list_keys(message: Message):
     for i, k in enumerate(keys, 1):
         text += f"{i}. <code>{k}</code>\n"
 
-    # Телеграм ограничивает 4096 символов — разбиваем если много ключей
     if len(text) > 4000:
         parts = [text[i:i+4000] for i in range(0, len(text), 4000)]
         for part in parts:
@@ -374,7 +343,6 @@ async def cmd_list_keys(message: Message):
         await message.answer(text)
 
 
-# --- Админ: смена канала (/setchannel) ---
 @router.message(Command("setchannel"))
 async def cmd_set_channel(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -385,16 +353,12 @@ async def cmd_set_channel(message: Message):
         await message.answer("Использование: <code>/setchannel @username</code>")
         return
 
-    # Обновляем глобальную переменную (будет работать до перезапуска)
     global CHANNEL_USERNAME
     CHANNEL_USERNAME = new_channel if new_channel.startswith("@") else f"@{new_channel}"
-
-    # Сохраняем в файл настроек
     save_config({"channel": CHANNEL_USERNAME})
     await message.answer(f"✅ Канал обновлён: <code>{CHANNEL_USERNAME}</code>")
 
 
-# ======================== КОНФИГ-ФАЙЛ ========================
 CONFIG_FILE = "config.json"
 
 def load_config() -> dict:
@@ -411,13 +375,11 @@ def save_config(cfg: dict):
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 
-# Загружаем канал из конфига при старте (если он там есть)
 saved_cfg = load_config()
 if "channel" in saved_cfg:
     CHANNEL_USERNAME = saved_cfg["channel"]
 
 
-# ======================== ЗАПУСК ========================
 async def main():
     init_db()
     logger.info("🚀 Бот запущен!")
