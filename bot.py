@@ -12,23 +12,27 @@ from aiogram.fsm.context import FSMContext
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
+# ======================== ПУТИ (АБСОЛЮТНЫЕ) ========================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+KEYS_FILE = os.path.join(BASE_DIR, "keys.json")
+DATABASE_FILE = os.path.join(BASE_DIR, "users.db")
+CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+
 # ======================== НАСТРОЙКИ ========================
 BOT_TOKEN = "8375269633:AAElLiElz8WvjdR_OxeCR6mBJZo6kzGK8xM"
 CHANNEL_USERNAME = "@growagarden_arferno"
-KEYS_FILE = "keys.json"
-DATABASE_FILE = "users.db"
 ADMIN_IDS = [7079908197]
 
 INSTRUCTION_TEXT = (
     "📖 <b>Инструкция по активации ключа в Steam:</b>\n\n"
-    "1️⃣ Откройте клиент <b>Steam</b> и войдите в свой аккаунт.\n"
-    "2️⃣ Нажмите на <b>имя вашего профиля</b> в правом верхнем углу.\n"
-    "3️⃣ В выпадающем меню выберите <b>«Активация продукта»</b>.\n"
-    "4️⃣ Нажмите <b>«Далее»</b>, затем поставьте галочку и нажмите <b>«Я согласен»</b>.\n"
-    "5️⃣ Введите полученный ключ в пустое поле.\n"
-    "6️⃣ Нажмите <b>«Далее»</b> и следуйте инструкциям на экране.\n\n"
-    "🎮 После активации игра/софт появится в вашей библиотеке Steam!\n\n"
-    "⚠️ Если у вас нет аккаунта Steam — создайте его на <a href=\"https://store.steampowered.com/\">store.steampowered.com</a>"
+    "1️⃣ Открой клиент <b>Steam</b> и войди в свой аккаунт.\n"
+    "2️⃣ Нажми на <b>имя профиля</b> в правом верхнем углу.\n"
+    "3️⃣ Выбери <b>«Активация продукта»</b>.\n"
+    "4️⃣ Нажми <b>«Далее»</b>, поставь галочку → <b>«Я согласен»</b>.\n"
+    "5️⃣ Введи полученный ключ в поле.\n"
+    "6️⃣ Нажми <b>«Далее»</b> и следуй инструкциям.\n\n"
+    "🎮 После активации игра появится в библиотеке!\n\n"
+    "💡 Если ключ не подходит — напиши в наш канал @growagarden_arferno"
 )
 # ==========================================================
 
@@ -46,6 +50,7 @@ dp = Dispatcher()
 router = Router()
 
 
+# ======================== БАЗА ДАННЫХ ========================
 def init_db():
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
@@ -60,7 +65,7 @@ def init_db():
     """)
     conn.commit()
     conn.close()
-    logger.info("✅ База данных инициализирована")
+    logger.info("✅ База данных OK: " + DATABASE_FILE)
 
 
 def user_exists(user_id: int) -> bool:
@@ -92,15 +97,24 @@ def get_stats() -> dict:
     return {"total_users": total}
 
 
-def load_keys() -> list:
+# ======================== РАБОТА С КЛЮЧАМИ ========================
+def ensure_keys_file():
+    """Если файла keys.json нет — создаём пустой"""
     if not os.path.exists(KEYS_FILE):
-        return []
+        logger.warning(f"⚠️ Файл {KEYS_FILE} не найден! Создаём пустой...")
+        save_keys([])
+
+
+def load_keys() -> list:
+    ensure_keys_file()
     try:
         with open(KEYS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data.get("keys", [])
-    except (json.JSONDecodeError, KeyError):
-        logger.error("Ошибка чтения keys.json")
+            keys = data.get("keys", [])
+            logger.info(f"📦 Загружено ключей из файла: {len(keys)}")
+            return keys
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error(f"Ошибка чтения keys.json: {e}")
         save_keys([])
         return []
 
@@ -108,6 +122,7 @@ def load_keys() -> list:
 def save_keys(keys: list):
     with open(KEYS_FILE, "w", encoding="utf-8") as f:
         json.dump({"keys": keys}, f, ensure_ascii=False, indent=2)
+    logger.info(f"💾 Сохранено ключей в файл: {len(keys)}")
 
 
 def get_next_key() -> str | None:
@@ -116,7 +131,7 @@ def get_next_key() -> str | None:
         return None
     key = keys.pop(0)
     save_keys(keys)
-    logger.info(f"🔑 Ключ выдан: {key[:8]}... (осталось {len(keys)})")
+    logger.info(f"🔑 ВЫДАН ключ: {key[:8]}... (осталось {len(keys)})")
     return key
 
 
@@ -124,19 +139,21 @@ def get_keys_count() -> int:
     return len(load_keys())
 
 
+# ======================== КЛАВИАТУРЫ ========================
 def get_channel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Перейти в канал", url="https://t.me/coppers_shop")],
+        [InlineKeyboardButton(text="📢 Перейти в канал", url="https://t.me/growagarden_arferno")],
         [InlineKeyboardButton(text="✅ Проверить подписку", callback_data="check_sub")]
     ])
 
 
 def get_main_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Наш канал", url="https://t.me/coppers_shop")]
+        [InlineKeyboardButton(text="📢 Наш канал", url="https://t.me/growagarden_arferno")]
     ])
 
 
+# ======================== ПРОВЕРКА ПОДПИСКИ ========================
 async def check_subscription(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(
@@ -145,22 +162,28 @@ async def check_subscription(user_id: int) -> bool:
         )
         return member.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.error(f"Ошибка при проверке подписки: {e}")
+        logger.error(f"Ошибка проверки подписки для {user_id}: {e}")
         return False
 
+
+# ======================== ОБРАБОТЧИКИ ========================
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     uid = message.from_user.id
+    logger.info(f"👤 /start от пользователя {uid} ({message.from_user.first_name})")
 
-    if get_keys_count() == 0:
+    count = get_keys_count()
+    logger.info(f"🔑 Ключей в базе ДО выдачи: {count}")
+
+    if count == 0:
         await message.answer(
             "👋 <b>Приветствуем!</b>\n\n"
             "😔 К сожалению, бесплатные ключи на данный момент <b>закончились</b>. "
-            "Следите за обновлениями — скоро будет новая партия!\n\n"
-            "📢 Подпишитесь, чтобы не пропустить:\n"
-            f"🔗 <a href=\"https://t.me/coppers_shop\">coppers_shop</a>",
+            "Следите за обновлениями!\n\n"
+            "📢 Подпишитесь:\n"
+            f"🔗 <a href=\"https://t.me/growagarden_arferno\">growagarden_arferno</a>",
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
         )
@@ -169,8 +192,8 @@ async def cmd_start(message: Message, state: FSMContext):
     if user_exists(uid):
         await message.answer(
             "🔒 <b>Упс!</b>\n\n"
-            "Вы уже получали ключ. Акция действует <b>один раз на человека</b>. "
-            "Попробуйте пригласить друзей 😉",
+            "Вы уже получали ключ. Акция действует <b>один раз</b> на человека. "
+            "Пригласите друзей 😉",
             reply_markup=get_main_keyboard()
         )
         return
@@ -180,9 +203,9 @@ async def cmd_start(message: Message, state: FSMContext):
     if not is_subscribed:
         await message.answer(
             "👋 <b>Приветствуем вас!</b>\n\n"
-            "🎁 Для получения <b>бесплатного ключа</b> подпишитесь на наш канал:\n\n"
-            f"📢 <a href=\"https://t.me/coppers_shop\">coppers_shop</a>\n\n"
-            "✅ После подписки нажмите кнопку <b>«Проверить подписку»</b> ниже 👇",
+            "🎁 Для получения <b>бесплатного ключа</b> подпишитесь на канал:\n\n"
+            f"📢 <a href=\"https://t.me/growagarden_arferno\">growagarden_arferno</a>\n\n"
+            "✅ После подписки нажмите кнопку <b>«Проверить подписку»</b> 👇",
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
         )
@@ -199,32 +222,36 @@ async def cmd_start(message: Message, state: FSMContext):
                 "🎉 <b>Поздравляем!</b>\n\n"
                 f"Вот ваш ключ:\n<code>{key}</code>\n\n"
                 f"📖 <b>Инструкция по активации:</b>\n\n{INSTRUCTION_TEXT}\n\n"
-                "🔒 Этот ключ выдаётся один раз. Удачи! 🚀",
+                "🔒 Ключ одноразовый. Удачи! 🚀",
                 reply_markup=get_main_keyboard()
             )
         else:
             await message.answer("😔 Ключи закончились. Попробуйте позже!")
+
+    logger.info(f"🔑 Ключей в базе ПОСЛЕ: {get_keys_count()}")
 
 
 @router.callback_query(F.data == "check_sub")
 async def check_sub_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     uid = callback.from_user.id
+    logger.info(f"🔍 Проверка подписки для {uid}")
 
     if get_keys_count() == 0:
         await callback.message.edit_text(
-            "😔 Ключи на данный момент <b>закончились</b>. Следите за обновлениями!",
+            "😔 Ключи <b>закончились</b>. Следите за обновлениями!",
             reply_markup=None
         )
         return
 
     is_subscribed = await check_subscription(uid)
+    logger.info(f"📢 Подписка пользователя {uid}: {'есть' if is_subscribed else 'нет'}")
 
     if not is_subscribed:
         await callback.message.edit_text(
             "❌ <b>Подписка не обнаружена!</b>\n\n"
             "Вы ещё не подписались на канал.\n\n"
-            f"📢 Подпишитесь: <a href=\"https://t.me/coppers_shop\">coppers_shop</a>\n"
+            f"📢 Подпишитесь: <a href=\"https://t.me/growagarden_arferno\">growagarden_arferno</a>\n"
             "Затем нажмите <b>«Проверить подписку»</b> ещё раз.",
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
@@ -232,7 +259,7 @@ async def check_sub_callback(callback: CallbackQuery, state: FSMContext):
     elif user_exists(uid):
         await callback.message.edit_text(
             "🔒 <b>Упс!</b>\n\n"
-            "Вы уже получали ключ. Акция действует один раз на человека."
+            "Вы уже получали ключ. Акция — один раз на человека."
         )
     else:
         key = get_next_key()
@@ -247,26 +274,24 @@ async def check_sub_callback(callback: CallbackQuery, state: FSMContext):
                 "🎉 <b>Поздравляем!</b>\n\n"
                 f"Вот ваш ключ:\n<code>{key}</code>\n\n"
                 f"📖 <b>Инструкция по активации:</b>\n\n{INSTRUCTION_TEXT}\n\n"
-                "🔒 Этот ключ выдаётся один раз. Удачи! 🚀",
+                "🔒 Ключ одноразовый. Удачи! 🚀",
                 reply_markup=get_main_keyboard()
             )
         else:
-            await callback.message.edit_text(
-                "😔 Ключи закончились. Попробуйте позже!"
-            )
+            await callback.message.edit_text("😔 Ключи закончились!")
 
 
 @router.message(Command("addkey"))
-async def cmd_add_key(message: Message):
+async def cmd_add_key(message: Message, state: FSMContext):
     if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔ У вас нет прав для этой команды.")
+        await message.answer("⛔ У вас нет прав.")
         return
 
     text = message.text.replace("/addkey", "").strip()
     if not text:
         await message.answer(
-            "📝 <b>Введите ключи через строку:</b>\n\n"
-            "<code>/addkey\nXXXX-XXXX-XXXX\nYYYY-YYYY-YYYY\nZZZZ-ZZZZ-ZZZZ</code>"
+            "📝 <b>Формат:</b>\n\n"
+            "<code>/addkey\nXXXX-XXXX-XXXX\nYYYY-YYYY-YYYY</code>"
         )
         return
 
@@ -281,30 +306,30 @@ async def cmd_add_key(message: Message):
 
     await message.answer(
         f"✅ Добавлено <b>{len(new_keys)}</b> ключей.\n"
-        f"📊 Всего в базе: <b>{len(existing)}</b> ключей."
+        f"📊 Всего в базе: <b>{len(existing)}</b>"
     )
     logger.info(f"🗝️ Админ {message.from_user.id} добавил {len(new_keys)} ключей")
 
 
 @router.message(Command("stats"))
-async def cmd_stats(message: Message):
+async def cmd_stats(message: Message, state: FSMContext):
     if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔ У вас нет прав для этой команды.")
+        await message.answer("⛔ У вас нет прав.")
         return
 
     keys_left = get_keys_count()
     stats = get_stats()
     await message.answer(
-        f"📊 <b>Статистика бота:</b>\n\n"
+        f"📊 <b>Статистика:</b>\n\n"
         f"🔑 Осталось ключей: <b>{keys_left}</b>\n"
         f"👤 Выдано ключей: <b>{stats['total_users']}</b>"
     )
 
 
 @router.message(Command("delkey"))
-async def cmd_del_key(message: Message):
+async def cmd_del_key(message: Message, state: FSMContext):
     if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔ У вас нет прав для этой команды.")
+        await message.answer("⛔ У вас нет прав.")
         return
 
     key_to_del = message.text.replace("/delkey", "").strip()
@@ -318,11 +343,11 @@ async def cmd_del_key(message: Message):
         save_keys(keys)
         await message.answer(f"✅ Ключ <code>{key_to_del}</code> удалён.")
     else:
-        await message.answer(f"❌ Ключ <code>{key_to_del}</code> не найден в базе.")
+        await message.answer(f"❌ Ключ <code>{key_to_del}</code> не найден.")
 
 
 @router.message(Command("listkeys"))
-async def cmd_list_keys(message: Message):
+async def cmd_list_keys(message: Message, state: FSMContext):
     if message.from_user.id not in ADMIN_IDS:
         return
 
@@ -344,7 +369,7 @@ async def cmd_list_keys(message: Message):
 
 
 @router.message(Command("setchannel"))
-async def cmd_set_channel(message: Message):
+async def cmd_set_channel(message: Message, state: FSMContext):
     if message.from_user.id not in ADMIN_IDS:
         return
 
@@ -356,11 +381,10 @@ async def cmd_set_channel(message: Message):
     global CHANNEL_USERNAME
     CHANNEL_USERNAME = new_channel if new_channel.startswith("@") else f"@{new_channel}"
     save_config({"channel": CHANNEL_USERNAME})
-    await message.answer(f"✅ Канал обновлён: <code>{CHANNEL_USERNAME}</code>")
+    await message.answer(f"✅ Канал: <code>{CHANNEL_USERNAME}</code>")
 
 
-CONFIG_FILE = "config.json"
-
+# ======================== КОНФИГ ========================
 def load_config() -> dict:
     if os.path.exists(CONFIG_FILE):
         try:
@@ -380,11 +404,17 @@ if "channel" in saved_cfg:
     CHANNEL_USERNAME = saved_cfg["channel"]
 
 
+# ======================== ЗАПУСК ========================
 async def main():
     init_db()
+    ensure_keys_file()
+    logger.info("=" * 50)
     logger.info("🚀 Бот запущен!")
-    logger.info(f"📢 Канал для проверки: {CHANNEL_USERNAME}")
+    logger.info(f"📢 Канал: {CHANNEL_USERNAME}")
     logger.info(f"🔑 Ключей в базе: {get_keys_count()}")
+    logger.info(f"🗄️ Путь к keys.json: {KEYS_FILE}")
+    logger.info(f"🗄️ Путь к users.db: {DATABASE_FILE}")
+    logger.info("=" * 50)
 
     dp.include_router(router)
     await dp.start_polling(bot)
